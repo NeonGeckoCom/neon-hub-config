@@ -110,6 +110,12 @@ For usage in a Neon Hub system, you will want to mount the configuration directo
 docker run -d -p 80:80 -v ~/.config/neon:/home/neon/.config/neon ghcr.io/neongeckocom/neon-hub-config:latest
 ```
 
+> **Note:** The command above assumes the default XDG config location (`~/.config/neon`). If you deployed with the Neon Hub installer, it places config under `~/xdg/config/neon` instead — adjust the host side of the volume mount accordingly:
+>
+> ```bash
+> docker run -d -p 80:80 -v ~/xdg/config/neon:/home/neon/.config/neon ghcr.io/neongeckocom/neon-hub-config:latest
+> ```
+
 ## Support
 
 For additional documentation and support:

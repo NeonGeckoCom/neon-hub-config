@@ -17,14 +17,14 @@ interface TooltipInterface {
 }
 
 const GENERAL_SETTINGS = [
-  "LOG_LEVEL",
+  "log_level",
   "lang",
   "time_format",
   "system_unit",
 ] as const;
 
 const TOOLTIPS: TooltipInterface = {
-  LOG_LEVEL:
+  log_level:
     "The level of logging to be used by the backend. Supports Python logging levels.",
   system_unit:
     "The system of measurement to be used by the backend. Options: metric, imperial (typically U.S.).",
@@ -64,7 +64,7 @@ interface Config {
   iris?: ConfigSection;
   websocket?: ConfigSection;
   general?: ConfigSection;
-  LOG_LEVEL?: string;
+  log_level?: string;
   skills?: {
     default_skills: string[];
     extra_dependencies: {
@@ -156,7 +156,7 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
     system_unit: "imperial",
     time_format: "half",
     lang: "en-us",
-    LOG_LEVEL: "INFO",
+    log_level: "INFO",
     hana: {},
     iris: {},
     skills: { default_skills: [], extra_dependencies: {} },
@@ -342,7 +342,7 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
       );
     }
 
-    if (key === "LOG_LEVEL") {
+    if (key === "log_level") {
       return (
         <select
           value={value as string}
@@ -470,12 +470,12 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
                 </label>
               )}
               {renderInputField(section, key, value)}
-              {(key === "LOG_LEVEL" ||
+              {(key === "log_level" ||
                 key === "lang" ||
                 section === "api_keys") && (
                 <a
                   href={
-                    key === "LOG_LEVEL"
+                    key === "log_level"
                       ? "https://docs.python.org/3/library/logging.html#logging-levels"
                       : key === "lang"
                       ? "https://langcodes-hickford.readthedocs.io/en/sphinx/index.html#standards-implemented"
@@ -493,8 +493,8 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
                   rel="noopener noreferrer"
                   className={`text-sm ${linkColor} hover:underline flex items-center mt-1`}
                 >
-                  {key === "LOG_LEVEL"
-                    ? "View LOG_LEVEL documentation"
+                  {key === "log_level"
+                    ? "View log level documentation"
                     : key === "lang"
                     ? "View library documentation for language/country codes"
                     : section === "api_keys"

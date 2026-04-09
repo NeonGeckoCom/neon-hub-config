@@ -20,7 +20,7 @@ The Configuration tab provides access to four main sections:
 
 #### 1. General Configuration
 
-- **LOG_LEVEL**: Set Python logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- **log_level**: Set Python logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - **Language**: Set system language using standard language codes
 - **Time Format**: Choose between 12-hour and 24-hour time display
 - **System Unit**: Select metric or imperial measurement system
@@ -94,7 +94,7 @@ The following features are currently in development:
 2. Use strong passwords for authentication
 3. Keep API keys secure and rotate them periodically
 4. Test configuration changes in non-production environments first
-5. Monitor LOG_LEVEL settings in production environments
+5. Monitor log_level settings in production environments
 
 ## Running the Docker Container
 

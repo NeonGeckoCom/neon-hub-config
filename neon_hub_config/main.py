@@ -12,11 +12,14 @@ Environment Variables:
 """
 import base64
 import logging
+import secrets
+import string
 from functools import wraps
 from os import getenv
 from os.path import exists, join, realpath, split, expanduser
 from typing import Dict, Optional
 
+import requests as http_requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic
@@ -33,6 +36,7 @@ VALID_USERNAME = getenv("NEON_HUB_CONFIG_USERNAME", "neon")
 VALID_PASSWORD = getenv("NEON_HUB_CONFIG_PASSWORD", "neon")
 DIANA_PATH = expanduser(getenv("DIANA_PATH", "/xdg/config/neon/diana.yaml"))
 NEON_PATH = expanduser(getenv("NEON_PATH", "/xdg/config/neon/neon.yaml"))
+HANA_SERVICE_HOST = getenv("HANA_SERVICE_HOST", "neon-hana")
 
 security = HTTPBasic()
 
@@ -384,6 +388,93 @@ async def diana_update_config(
     """
     logger.info("Updating Diana config")
     return manager.update_diana_config(config)
+
+
+def _generate_node_password(length: int = 24) -> str:
+    """Generate a secure random password for node pairing."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _get_hana_url(manager: NeonHubConfigManager) -> str:
+    """Get the HANA URL for server-to-server API calls.
+
+    In a standard Hub deployment, hub-config and HANA are on the same
+    Docker network, so we reach HANA at http://neon-hana:8080.
+    If server_host is an actual hostname, construct the URL from it
+    directly — this is the internal API address, not the Node-facing
+    address (which may differ due to reverse proxies or port mapping).
+    """
+    diana = manager.get_diana_config()
+    hana_cfg = diana.get("hana", {})
+    host = hana_cfg.get("server_host", "0.0.0.0")
+    port = hana_cfg.get("port", 8080)
+    if host == "0.0.0.0":
+        return f"http://{HANA_SERVICE_HOST}:{port}"
+    scheme = "https" if port == 443 else "http"
+    if (scheme == "https" and port == 443) or (scheme == "http" and port == 80):
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
+
+
+def _get_hub_address(manager: NeonHubConfigManager) -> str:
+    """Get the external Hub address that Nodes should connect to."""
+    neon_cfg = manager.get_neon_user_config() or {}
+    node_cfg = neon_cfg.get("neon_node", {})
+    hana_address = node_cfg.get("hana_address")
+    if hana_address:
+        return hana_address
+    # Fallback: construct from hostname
+    import socket
+    hostname = socket.gethostname()
+    return f"http://{hostname}:8082"
+
+
+@app.post("/v1/pair")
+@require_auth
+async def create_node_pairing(
+    username: str = Depends(verify_auth_header),
+    manager: NeonHubConfigManager = Depends(get_config_manager),
+):
+    """
+    Create credentials for a new Node to connect to this Hub.
+
+    Generates a username and password, registers them with HANA,
+    and returns the pairing data suitable for encoding in a QR code.
+    """
+    node_username = f"node-{secrets.token_hex(4)}"
+    node_password = _generate_node_password()
+    hana_url = _get_hana_url(manager)
+    hub_address = _get_hub_address(manager)
+
+    try:
+        response = http_requests.post(
+            f"{hana_url}/auth/register",
+            json={"username": node_username, "password": node_password},
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.error(
+                "HANA registration failed: %s %s",
+                response.status_code,
+                response.text,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to register node user with HANA",
+            )
+    except http_requests.RequestException as e:
+        logger.error("Failed to reach HANA at %s: %s", hana_url, e)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to HANA service",
+        )
+
+    return {
+        "hub_address": hub_address,
+        "username": node_username,
+        "password": node_password,
+    }
 
 
 project_dir, _ = split(realpath(__file__))

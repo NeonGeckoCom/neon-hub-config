@@ -7,8 +7,8 @@ interface NodeServicesProps {
 
 interface PairingData {
   hub_address: string;
-  username: string;
-  password: string;
+  access_token: string;
+  refresh_token: string;
 }
 
 const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
@@ -16,7 +16,6 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
   const [pairing, setPairing] = useState<PairingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const generatePairing = async () => {
     setLoading(true);
@@ -46,20 +45,12 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
     }
   };
 
-  const copyCredentials = async () => {
-    if (!pairing) return;
-    const text = `Hub: ${pairing.hub_address}\nUsername: ${pairing.username}\nPassword: ${pairing.password}`;
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const qrPayload = pairing
     ? JSON.stringify({
         version: 1,
         hub_address: pairing.hub_address,
-        username: pairing.username,
-        password: pairing.password,
+        access_token: pairing.access_token,
+        refresh_token: pairing.refresh_token,
       })
     : "";
 
@@ -75,8 +66,7 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
         </h3>
         <p className="text-gray-600 dark:text-gray-300 mb-4">
           Generate a QR code to connect a Neon Node to this Hub.
-          Scan the code from the Neon Node app, or use the manual
-          connection details below.
+          Scan the code from the Neon Node app to connect automatically.
         </p>
 
         <button
@@ -99,8 +89,8 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
           <div className="flex flex-col items-center p-6 bg-white rounded-lg border border-gray-200 dark:border-gray-600">
             <QRCodeSVG
               value={qrPayload}
-              size={256}
-              level="M"
+              size={300}
+              level="L"
               marginSize={2}
             />
             <p className="mt-3 text-sm text-gray-500">
@@ -109,28 +99,14 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
           </div>
 
           <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                Manual Connection
-              </h4>
-              <button
-                onClick={copyCredentials}
-                className="text-sm px-3 py-1 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-gray-600 rounded transition-colors"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <div className="space-y-1 font-mono text-sm text-gray-600 dark:text-gray-300">
-              <p>
-                <span className="text-gray-400">Hub:</span> {pairing.hub_address}
-              </p>
-              <p>
-                <span className="text-gray-400">Username:</span> {pairing.username}
-              </p>
-              <p>
-                <span className="text-gray-400">Password:</span> {pairing.password}
-              </p>
-            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              <span className="text-gray-400">Hub:</span>{" "}
+              <span className="font-mono">{pairing.hub_address}</span>
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Each QR code contains a unique token scoped to Node-level
+              permissions. Generate a new code for each device.
+            </p>
           </div>
         </div>
       )}

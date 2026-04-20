@@ -11,7 +11,6 @@ const ConnectedDevices: React.FC<ConnectedDevicesProps> = ({isDark}) => {
       <p className="text-gray-600 dark:text-gray-300">
         This feature is currently under development. It will display information about devices connected to the Hub.
       </p>
-      {/* Add implementation for Connected Devices display here */}
     </div>
   );
 };

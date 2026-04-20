@@ -12,11 +12,14 @@ Environment Variables:
 """
 import base64
 import logging
+import secrets
+import string
 from functools import wraps
 from os import getenv
 from os.path import exists, join, realpath, split, expanduser
 from typing import Dict, Optional
 
+import requests as http_requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic
@@ -33,8 +36,105 @@ VALID_USERNAME = getenv("NEON_HUB_CONFIG_USERNAME", "neon")
 VALID_PASSWORD = getenv("NEON_HUB_CONFIG_PASSWORD", "neon")
 DIANA_PATH = expanduser(getenv("DIANA_PATH", "/xdg/config/neon/diana.yaml"))
 NEON_PATH = expanduser(getenv("NEON_PATH", "/xdg/config/neon/neon.yaml"))
+HANA_SERVICE_HOST = getenv("HANA_SERVICE_HOST", "neon-hana")
+HUB_ADMIN_TOKEN_FILE = expanduser(
+    getenv("HUB_ADMIN_TOKEN_FILE", "/xdg/config/neon/hub_admin.yaml"))
 
 security = HTTPBasic()
+
+
+class HanaClient:
+    """Manages an authenticated session with HANA using the Hub admin token."""
+
+    def __init__(self, token_file: str, hana_url: str):
+        self._token_file = token_file
+        self._hana_url = hana_url
+        self._access_token = None
+        self._refresh_token = None
+        self._username = None
+        self._password = None
+        self._load_token()
+
+    def _load_token(self):
+        try:
+            with open(self._token_file, "r", encoding="utf-8") as f:
+                data = YAML().load(f) or {}
+            self._refresh_token = data.get("refresh_token")
+            self._username = data.get("username")
+            self._password = data.get("password")
+            if self._refresh_token:
+                self._refresh_access_token()
+        except FileNotFoundError:
+            logger.warning("Hub admin token file not found at %s",
+                           self._token_file)
+        except Exception as e:
+            logger.warning("Failed to load hub admin token: %s", e)
+
+    def _refresh_access_token(self):
+        if not self._username or not self._password:
+            logger.warning("Cannot refresh HANA token: missing credentials")
+            return
+        try:
+            resp = http_requests.post(
+                f"{self._hana_url}/auth/login",
+                json={
+                    "username": self._username,
+                    "password": self._password,
+                    "token_name": "hub-config",
+                },
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                self._access_token = data.get("access_token")
+                self._refresh_token = data.get("refresh_token",
+                                                self._refresh_token)
+                self._save_token()
+            else:
+                logger.warning("HANA login failed: %s", resp.text)
+        except http_requests.RequestException as e:
+            logger.warning("Failed to reach HANA for token refresh: %s", e)
+
+    def _save_token(self):
+        try:
+            with open(self._token_file, "w", encoding="utf-8") as f:
+                YAML().dump({
+                    "username": self._username,
+                    "refresh_token": self._refresh_token,
+                }, f)
+        except Exception as e:
+            logger.warning("Failed to save updated token: %s", e)
+
+    def post(self, path: str, **kwargs) -> http_requests.Response:
+        """Make an authenticated POST to HANA. Retries once on 401/403."""
+        resp = self._do_post(path, **kwargs)
+        if resp.status_code in (401, 403):
+            self._refresh_access_token()
+            resp = self._do_post(path, **kwargs)
+        return resp
+
+    def _do_post(self, path: str, **kwargs) -> http_requests.Response:
+        headers = kwargs.pop("headers", {})
+        if self._access_token:
+            headers["Authorization"] = f"Bearer {self._access_token}"
+        return http_requests.post(
+            f"{self._hana_url}{path}",
+            headers=headers,
+            timeout=kwargs.pop("timeout", 10),
+            **kwargs,
+        )
+
+    @property
+    def is_available(self) -> bool:
+        return self._access_token is not None
+
+    @property
+    def username(self) -> Optional[str]:
+        return self._username
+
+    @property
+    def password(self) -> Optional[str]:
+        return self._password
 
 
 class NeonHubConfigManager:
@@ -211,12 +311,55 @@ class NeonHubConfigManager:
         return self._load_diana_config()
 
 
+def _generate_node_password(length: int = 24) -> str:
+    """Generate a secure random password for node pairing."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _get_hana_url(manager: NeonHubConfigManager) -> str:
+    """Get the HANA URL for server-to-server API calls.
+
+    In a standard Hub deployment, hub-config and HANA are on the same
+    Docker network, so we reach HANA at http://neon-hana:8080.
+    If server_host is an actual hostname, construct the URL from it
+    directly — this is the internal API address, not the Node-facing
+    address (which may differ due to reverse proxies or port mapping).
+    """
+    diana = manager.get_diana_config()
+    hana_cfg = diana.get("hana", {})
+    host = hana_cfg.get("server_host", "0.0.0.0")
+    port = hana_cfg.get("port", 8080)
+    if host == "0.0.0.0":
+        return f"http://{HANA_SERVICE_HOST}:{port}"
+    scheme = "https" if port == 443 else "http"
+    if (scheme == "https" and port == 443) or (scheme == "http" and port == 80):
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
+
+
+def _get_hub_address(manager: NeonHubConfigManager) -> str:
+    """Get the external Hub address that Nodes should connect to."""
+    neon_cfg = manager.get_neon_user_config() or {}
+    node_cfg = neon_cfg.get("neon_node", {})
+    hana_address = node_cfg.get("hana_address")
+    if hana_address:
+        return hana_address
+    import socket
+    hostname = socket.gethostname()
+    return f"http://{hostname}:8082"
+
+
 app = FastAPI(
     title="Neon Hub Configuration API",
     description="API for managing Neon Hub and Diana configurations with basic authentication",
     version="1.0.0",
 )
 config_manager = NeonHubConfigManager()
+hana_client = HanaClient(
+    token_file=HUB_ADMIN_TOKEN_FILE,
+    hana_url=_get_hana_url(config_manager),
+)
 
 # Configure CORS
 origins = ["*"]
@@ -384,6 +527,58 @@ async def diana_update_config(
     """
     logger.info("Updating Diana config")
     return manager.update_diana_config(config)
+
+
+@app.post("/v1/pair")
+@require_auth
+async def create_node_pairing(
+    username: str = Depends(verify_auth_header),
+    manager: NeonHubConfigManager = Depends(get_config_manager),
+):
+    """
+    Generate NODE-scoped tokens for pairing a Node to this Hub.
+
+    Logs in as the Hub admin with node_auth=true to obtain tokens
+    scoped to AccessRoles.NODE. The QR code encodes these tokens
+    directly — no password leaves the Hub.
+    """
+    if not hana_client.is_available or not hana_client.password:
+        raise HTTPException(
+            status_code=503,
+            detail="Hub admin credentials not configured. Run the "
+                   "installer to set up the admin account.",
+        )
+
+    hub_address = _get_hub_address(manager)
+    hana_url = _get_hana_url(manager)
+
+    try:
+        login_response = http_requests.post(
+            f"{hana_url}/auth/login",
+            json={
+                "username": hana_client.username,
+                "password": hana_client.password,
+                "token_name": f"node-{secrets.token_hex(4)}",
+                "node_auth": True,
+            },
+            timeout=10,
+        )
+        if login_response.status_code != 200:
+            logger.error("HANA node login failed: %s %s",
+                         login_response.status_code, login_response.text)
+            raise HTTPException(status_code=502,
+                                detail="Failed to generate node tokens")
+    except http_requests.RequestException as e:
+        logger.error("Failed to reach HANA: %s", e)
+        raise HTTPException(status_code=502,
+                            detail="Could not connect to HANA service")
+
+    login_data = login_response.json()
+    return {
+        "hub_address": hub_address,
+        "access_token": login_data["access_token"],
+        "refresh_token": login_data["refresh_token"],
+    }
 
 
 project_dir, _ = split(realpath(__file__))

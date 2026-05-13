@@ -96,12 +96,24 @@ class HanaClient:
             logger.warning("Failed to reach HANA for token refresh: %s", e)
 
     def _save_token(self):
+        # Preserve the admin password the installer wrote alongside the
+        # refresh token. Without it, a restart after the first save
+        # has no fallback when the cached refresh token becomes
+        # unusable (network blip during refresh, refresh-token TTL
+        # expiry on a long-idle hub, etc.) — _refresh_access_token
+        # logs "missing credentials" and the QR pairing endpoint
+        # serves 503 forever. Future work: use HANA's /auth/refresh
+        # for the hot path and keep the password as a cold-recovery
+        # fallback only.
         try:
+            payload = {
+                "username": self._username,
+                "refresh_token": self._refresh_token,
+            }
+            if self._password:
+                payload["password"] = self._password
             with open(self._token_file, "w", encoding="utf-8") as f:
-                YAML().dump({
-                    "username": self._username,
-                    "refresh_token": self._refresh_token,
-                }, f)
+                YAML().dump(payload, f)
         except Exception as e:
             logger.warning("Failed to save updated token: %s", e)
 

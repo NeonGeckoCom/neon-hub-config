@@ -1,10 +1,29 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { API_BASE_URL } from "../components/HubManagementUI"
- 
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+// Build-time configuration with runtime fallback
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+
+// A failed network request rejects with an opaque browser message
+// ("Failed to fetch") that says nothing about where the request went.
+// Wrap it with the target URL so the UI error is actionable.
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${api.getBaseUrl()}${path}`;
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not reach the Hub API at ${url} (${detail}). ` +
+        'Check the API base URL under "API Configuration (Advanced)".'
+    );
+  }
+}
+
 // API utilities
 export const api = {
   // Method to update runtime configuration
@@ -26,7 +45,7 @@ export const api = {
   },
 
   async fetchNeonConfig() {
-    const response = await fetch(`${api.getBaseUrl()}/v1/neon_config`, {
+    const response = await apiFetch(`/v1/neon_config`, {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
@@ -41,7 +60,7 @@ export const api = {
   },
 
   async fetchDianaConfig() {
-    const response = await fetch(`${api.getBaseUrl()}/v1/diana_config`, {
+    const response = await apiFetch(`/v1/diana_config`, {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
@@ -56,7 +75,7 @@ export const api = {
   },
 
   async saveNeonConfig(config: object) {
-    const response = await fetch(`${api.getBaseUrl()}/v1/neon_config`, {
+    const response = await apiFetch(`/v1/neon_config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
@@ -113,7 +132,7 @@ export const api = {
   },
 
   async saveDianaConfig(config: object) {
-    const response = await fetch(`${api.getBaseUrl()}/v1/diana_config`, {
+    const response = await apiFetch(`/v1/diana_config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),

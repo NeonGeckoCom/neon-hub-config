@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip";
 import SecretField from "./SecretField";
+import Skills from "./Skills";
 import { api } from "../lib/utils";
 
 // Build-time configuration with runtime fallback
@@ -568,6 +569,7 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
         )}
         {renderConfigSection("hana", config.hana || {}, "HANA Configuration")}
         {renderConfigSection("iris", config.iris || {}, "IRIS Configuration")}
+        <Skills isDark={isDark} />
         <BaseUrlConfig isDark={isDark} />
       </div>
       <button

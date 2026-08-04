@@ -15,12 +15,13 @@ import logging
 import secrets
 import string
 from functools import wraps
-from os import getenv
-from os.path import exists, join, realpath, split, expanduser
-from typing import Dict, Optional
+from os import getenv, listdir
+from os.path import dirname, exists, isdir, join, realpath, split, expanduser
+from typing import Dict, List, Optional
 
 import requests as http_requests
 from fastapi import Depends, FastAPI, Header, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic
 from fastapi.staticfiles import StaticFiles
@@ -298,6 +299,55 @@ class NeonHubConfigManager:
         self._save_neon_user_config(config)
         return self.get_neon_user_config()
 
+    def get_skills_state(self) -> Dict:
+        """
+        Get the list of installed skills and the current skill blacklist.
+
+        Installed skills are discovered from the skill settings directories
+        that each loaded skill creates alongside neon.yaml
+        (<config dir>/skills/<skill_id>/). The blacklist comes from
+        skills.blacklisted_skills in the Neon user configuration.
+
+        Returns:
+            Dict: {"installed": [skill_id, ...], "blacklisted": [skill_id, ...]}
+        """
+        skills_dir = join(dirname(self.neon_user_config_path), "skills")
+        installed = []
+        if isdir(skills_dir):
+            try:
+                installed = sorted(
+                    entry for entry in listdir(skills_dir)
+                    if isdir(join(skills_dir, entry))
+                )
+            except OSError as e:
+                self.logger.exception(f"Error listing skills directory: {e}")
+        config = self._load_neon_user_config() or {}
+        skills_config = config.get("skills") or {}
+        blacklisted = skills_config.get("blacklisted_skills") or []
+        return {"installed": installed, "blacklisted": list(blacklisted)}
+
+    def update_blacklisted_skills(self, blacklisted: List[str]) -> Dict:
+        """
+        Update skills.blacklisted_skills in the Neon user configuration,
+        preserving any other keys under the skills section.
+
+        Args:
+            blacklisted (List[str]): Skill IDs that should not be loaded
+
+        Returns:
+            Dict: Updated skills state (see get_skills_state)
+        """
+        # Dedupe while preserving order; drop empty entries
+        cleaned = list(dict.fromkeys(s.strip() for s in blacklisted if s.strip()))
+        config = self._load_neon_user_config() or {}
+        skills_config = config.get("skills")
+        if not isinstance(skills_config, dict):
+            skills_config = {}
+        skills_config["blacklisted_skills"] = cleaned
+        config["skills"] = skills_config
+        self._save_neon_user_config(config)
+        return self.get_skills_state()
+
     def get_diana_config(self) -> Dict:
         """
         Get the current Diana configuration.
@@ -539,6 +589,42 @@ async def diana_update_config(
     """
     logger.info("Updating Diana config")
     return manager.update_diana_config(config)
+
+
+class SkillsBlacklistUpdate(BaseModel):
+    """Request body for updating the skill blacklist."""
+    blacklisted_skills: List[str]
+
+
+@app.get("/v1/skills")
+async def skills_get_state(
+    manager: NeonHubConfigManager = Depends(get_config_manager)
+):
+    """
+    Get the list of installed skills and the current skill blacklist.
+
+    Returns:
+        Dict: {"installed": [skill_id, ...], "blacklisted": [skill_id, ...]}
+    """
+    return manager.get_skills_state()
+
+
+@app.post("/v1/skills")
+async def skills_update_blacklist(
+    update: SkillsBlacklistUpdate,
+    manager: NeonHubConfigManager = Depends(get_config_manager),
+):
+    """
+    Update skills.blacklisted_skills in the Neon user configuration.
+
+    Args:
+        update (SkillsBlacklistUpdate): New list of blacklisted skill IDs
+
+    Returns:
+        Dict: Updated skills state
+    """
+    logger.info("Updating skill blacklist")
+    return manager.update_blacklisted_skills(update.blacklisted_skills)
 
 
 @app.post("/v1/pair")

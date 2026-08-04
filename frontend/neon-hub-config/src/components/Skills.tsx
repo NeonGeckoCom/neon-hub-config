@@ -1,0 +1,415 @@
+import React, { useEffect, useState } from "react";
+import { Plus, RefreshCw, X } from "lucide-react";
+import { api } from "../lib/utils";
+
+interface SkillsProps {
+  isDark: boolean;
+}
+
+interface SkillsState {
+  installed: string[];
+  blacklisted: string[];
+  default_skills: string[];
+}
+
+// "skill-date_time.neongeckocom" -> "Date Time"
+const skillDisplayName = (skillId: string) => {
+  const base = skillId.split(".")[0].replace(/^(neon[-_])?skill[-_]/i, "");
+  return base
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+const Skills: React.FC<SkillsProps> = ({ isDark }) => {
+  const [installed, setInstalled] = useState<string[]>([]);
+  const [blacklisted, setBlacklisted] = useState<string[]>([]);
+  const [savedBlacklist, setSavedBlacklist] = useState<string[]>([]);
+  const [customSkillId, setCustomSkillId] = useState("");
+  const [defaultSkills, setDefaultSkills] = useState<string[]>([]);
+  const [savedDefaultSkills, setSavedDefaultSkills] = useState<string[]>([]);
+  const [newDefaultSkill, setNewDefaultSkill] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savingDefaultSkills, setSavingDefaultSkills] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [defaultSkillsSaveError, setDefaultSkillsSaveError] = useState<
+    string | null
+  >(null);
+
+  const applyState = (data: SkillsState) => {
+    setInstalled(data.installed || []);
+    setBlacklisted(data.blacklisted || []);
+    setSavedBlacklist(data.blacklisted || []);
+    setDefaultSkills(data.default_skills || []);
+    setSavedDefaultSkills(data.default_skills || []);
+  };
+
+  const fetchSkills = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      applyState(await api.fetchSkills());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch skills");
+      console.error("Skills fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSkills();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hasChanges =
+    JSON.stringify([...blacklisted].sort()) !==
+    JSON.stringify([...savedBlacklist].sort());
+
+  const hasDefaultSkillsChanges =
+    JSON.stringify(defaultSkills) !== JSON.stringify(savedDefaultSkills);
+
+  const saveSkills = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      applyState(await api.saveSkillsBlacklist(blacklisted));
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Failed to save skills"
+      );
+      console.error("Skills save error:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveDefaultSkills = async () => {
+    setSavingDefaultSkills(true);
+    setDefaultSkillsSaveError(null);
+    try {
+      applyState(await api.saveDefaultSkills(defaultSkills));
+    } catch (err) {
+      setDefaultSkillsSaveError(
+        err instanceof Error ? err.message : "Failed to save default skills"
+      );
+      console.error("Default skills save error:", err);
+    } finally {
+      setSavingDefaultSkills(false);
+    }
+  };
+
+  const toggleSkill = (skillId: string) => {
+    setBlacklisted((prev) =>
+      prev.includes(skillId)
+        ? prev.filter((id) => id !== skillId)
+        : [...prev, skillId]
+    );
+  };
+
+  const disableCustomSkill = () => {
+    const skillId = customSkillId.trim();
+    if (!skillId || blacklisted.includes(skillId)) return;
+    setBlacklisted((prev) => [...prev, skillId]);
+    setCustomSkillId("");
+  };
+
+  const addDefaultSkill = () => {
+    const entry = newDefaultSkill.trim();
+    if (!entry || defaultSkills.includes(entry)) return;
+    setDefaultSkills((prev) => [...prev, entry]);
+    setNewDefaultSkill("");
+  };
+
+  const removeDefaultSkill = (entry: string) => {
+    setDefaultSkills((prev) => prev.filter((item) => item !== entry));
+  };
+
+  const borderColor = isDark ? "border-orange-400" : "border-orange-600";
+  const cardBgColor = isDark ? "bg-gray-800" : "bg-orange-100";
+  const bgColor = isDark ? "bg-gray-900" : "bg-white";
+
+  // Show every installed skill plus any blacklisted entries that are not
+  // in the installed list (so they can still be re-enabled).
+  const allSkills = [
+    ...installed,
+    ...blacklisted.filter((id) => !installed.includes(id)),
+  ].sort();
+
+  return (
+    <div>
+      <div className={`mb-4 border ${borderColor} rounded-lg overflow-hidden`}>
+      <div className={`${cardBgColor} p-4 flex justify-between items-center`}>
+        <h2
+          className={`text-xl font-semibold ${
+            isDark ? "text-orange-200" : "text-orange-800"
+          }`}
+        >
+          Skills
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchSkills}
+            disabled={loading}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded
+              ${
+                isDark
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }
+              text-white transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
+            `}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          <button
+            onClick={saveSkills}
+            disabled={saving || !hasChanges}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded
+              ${
+                isDark
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }
+              text-white transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
+            `}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${saving ? "animate-spin" : ""}`}
+            />
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="p-4 bg-red-500 text-white">{error}</div>}
+      {saveError && <div className="p-4 bg-red-500 text-white">{saveError}</div>}
+
+      <div className={`${bgColor} p-4`}>
+        <p className="text-sm mb-4">
+          Skills come pre-installed with your Neon Hub. Turn off a skill to
+          stop it from loading. A restart is necessary for the change to take
+          effect.
+        </p>
+
+        {loading && !allSkills.length ? (
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            Loading skills...
+          </div>
+        ) : allSkills.length ? (
+          <ul className="divide-y divide-gray-500/20">
+            {allSkills.map((skillId) => {
+              const enabled = !blacklisted.includes(skillId);
+              return (
+                <li
+                  key={skillId}
+                  className="py-2 flex items-center justify-between gap-4"
+                >
+                  <div>
+                    <span className="block font-medium">
+                      {skillDisplayName(skillId)}
+                      {!installed.includes(skillId) && (
+                        <span className="ml-2 text-xs text-gray-400">
+                          (not installed)
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-xs font-mono text-gray-400">
+                      {skillId}
+                    </span>
+                  </div>
+                  <label
+                    className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer"
+                    aria-label={`${enabled ? "Disable" : "Enable"} ${skillDisplayName(skillId)}`}
+                  >
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={enabled}
+                      onChange={() => toggleSkill(skillId)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`
+                        absolute inset-0 rounded-full transition-colors
+                        peer-focus-visible:outline peer-focus-visible:outline-2
+                        peer-focus-visible:outline-offset-2 peer-focus-visible:outline-orange-500
+                        ${enabled ? "bg-green-500" : isDark ? "bg-gray-600" : "bg-gray-300"}
+                      `}
+                    />
+                    <span
+                      className={`
+                        absolute top-1 left-1 h-4 w-4 transform rounded-full bg-white transition-transform
+                        ${enabled ? "translate-x-5" : "translate-x-0"}
+                      `}
+                    />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-400">
+            No skills found. Skills appear here after they have been loaded at
+            least once by your Neon Hub.
+          </p>
+        )}
+
+        <div className="mt-4">
+          <label className="block text-sm font-medium mb-1">
+            Disable a skill not listed above
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customSkillId}
+              onChange={(e) => setCustomSkillId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && disableCustomSkill()}
+              placeholder="skill-id.author"
+              className={`w-full p-2 rounded ${
+                isDark ? "bg-gray-700 text-white" : "bg-white text-gray-900"
+              } border ${borderColor}`}
+            />
+            <button
+              onClick={disableCustomSkill}
+              disabled={!customSkillId.trim()}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded whitespace-nowrap
+                ${
+                  isDark
+                    ? "bg-orange-600 hover:bg-orange-700"
+                    : "bg-orange-500 hover:bg-orange-600"
+                }
+                text-white transition-colors
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+            >
+              <Plus className="h-4 w-4" />
+              Disable
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={`mt-4 border ${borderColor} rounded-lg overflow-hidden`}>
+        <div className={`${cardBgColor} p-4 flex justify-between items-center`}>
+          <h2
+            className={`text-xl font-semibold ${
+              isDark ? "text-orange-200" : "text-orange-800"
+            }`}
+          >
+            Default Skills
+          </h2>
+          <button
+            onClick={saveDefaultSkills}
+            disabled={savingDefaultSkills || !hasDefaultSkillsChanges}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded
+              ${
+                isDark
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }
+              text-white transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
+            `}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${savingDefaultSkills ? "animate-spin" : ""}`}
+            />
+            {savingDefaultSkills ? "Saving..." : "Save Default Skills"}
+          </button>
+        </div>
+
+        {defaultSkillsSaveError && (
+          <div className="p-4 bg-red-500 text-white">
+            {defaultSkillsSaveError}
+          </div>
+        )}
+
+        <div className={`${bgColor} p-4`}>
+          <p className="text-sm mb-4">
+            Add a new skill with its pip package name, its Git repository
+            URL, or a local path. A restart is necessary for a new skill to
+            start.
+          </p>
+
+          {defaultSkills.length ? (
+            <ul className="divide-y divide-gray-500/20 mb-4">
+              {defaultSkills.map((entry) => (
+                <li
+                  key={entry}
+                  className="py-2 flex items-center justify-between gap-4"
+                >
+                  <span className="text-sm font-mono break-all">{entry}</span>
+                  <button
+                    aria-label={`Remove ${entry}`}
+                    onClick={() => removeDefaultSkill(entry)}
+                    className={`
+                      flex-shrink-0 p-1 rounded transition-colors
+                      ${
+                        isDark
+                          ? "hover:bg-gray-700 text-gray-300"
+                          : "hover:bg-orange-100 text-gray-500"
+                      }
+                    `}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-400 mb-4">
+              No default skills configured.
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newDefaultSkill}
+              onChange={(e) => setNewDefaultSkill(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addDefaultSkill()}
+              placeholder="skill-name, git+https://..., or /path/to/skill"
+              className={`w-full p-2 rounded ${
+                isDark ? "bg-gray-700 text-white" : "bg-white text-gray-900"
+              } border ${borderColor}`}
+            />
+            <button
+              onClick={addDefaultSkill}
+              disabled={!newDefaultSkill.trim()}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded whitespace-nowrap
+                ${
+                  isDark
+                    ? "bg-orange-600 hover:bg-orange-700"
+                    : "bg-orange-500 hover:bg-orange-600"
+                }
+                text-white transition-colors
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  );
+};
+
+export default Skills;

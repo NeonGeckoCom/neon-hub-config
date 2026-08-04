@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip";
 import SecretField from "./SecretField";
+import Skills from "./Skills";
 import { api } from "../lib/utils";
 
 // Build-time configuration with runtime fallback
@@ -561,6 +562,7 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
           ),
           "General Configuration"
         )}
+        <Skills isDark={isDark} />
         {renderConfigSection(
           "api_keys",
           config.api_keys || {},

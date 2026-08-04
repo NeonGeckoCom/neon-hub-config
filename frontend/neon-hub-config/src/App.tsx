@@ -20,6 +20,14 @@ const AppContent: React.FC = () => {
     setIsDark(prefersDark);
   }, []);
 
+  // The theme class must live on the document root, not just app-container:
+  // index.css styles html/body (page background, buttons) and #root adds
+  // padding around the app, so a root-level mismatch shows through as a
+  // wrong-colored frame around the UI.
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [isDark]);
+
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);

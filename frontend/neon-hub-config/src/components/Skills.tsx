@@ -139,7 +139,8 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
   ].sort();
 
   return (
-    <div className={`mb-4 border ${borderColor} rounded-lg overflow-hidden`}>
+    <div>
+      <div className={`mb-4 border ${borderColor} rounded-lg overflow-hidden`}>
       <div className={`${cardBgColor} p-4 flex justify-between items-center`}>
         <h2
           className={`text-xl font-semibold ${
@@ -195,9 +196,8 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
 
       <div className={`${bgColor} p-4`}>
         <p className="text-sm mb-4">
-          Skills come pre-installed with your Neon Hub. Disabled skills are
-          added to <code>skills.blacklisted_skills</code> in neon.yaml and will
-          not be loaded. Changes may require a restart of Neon services to take
+          Skills come pre-installed with your Neon Hub. Turn off a skill to
+          stop it from loading. A restart is necessary for the change to take
           effect.
         </p>
 
@@ -228,25 +228,32 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
                       {skillId}
                     </span>
                   </div>
-                  <button
-                    role="switch"
-                    aria-checked={enabled}
+                  <label
+                    className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer"
                     aria-label={`${enabled ? "Disable" : "Enable"} ${skillDisplayName(skillId)}`}
-                    onClick={() => toggleSkill(skillId)}
-                    className={`
-                      relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
-                      transition-colors focus:outline-none focus:ring-2
-                      focus:ring-orange-500 focus:ring-opacity-50
-                      ${enabled ? "bg-green-500" : "bg-gray-400"}
-                    `}
                   >
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={enabled}
+                      onChange={() => toggleSkill(skillId)}
+                      className="peer sr-only"
+                    />
                     <span
                       className={`
-                        inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                        ${enabled ? "translate-x-6" : "translate-x-1"}
+                        absolute inset-0 rounded-full transition-colors
+                        peer-focus-visible:outline peer-focus-visible:outline-2
+                        peer-focus-visible:outline-offset-2 peer-focus-visible:outline-orange-500
+                        ${enabled ? "bg-green-500" : isDark ? "bg-gray-600" : "bg-gray-300"}
                       `}
                     />
-                  </button>
+                    <span
+                      className={`
+                        absolute top-1 left-1 h-4 w-4 transform rounded-full bg-white transition-transform
+                        ${enabled ? "translate-x-5" : "translate-x-0"}
+                      `}
+                    />
+                  </label>
                 </li>
               );
             })}
@@ -292,25 +299,54 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
             </button>
           </div>
         </div>
+      </div>
 
-        <div className="mt-6 pt-4 border-t border-gray-500/20">
-          <h3 className="text-sm font-semibold mb-1">Default Skills</h3>
-          <p className="text-sm mb-3">
-            Entries in this list are added to{" "}
-            <code>skills.default_skills</code> in neon.yaml. The skills
-            container installs each entry with pip on every boot. Entries can
-            be a pip package name, a git URL, or a local path. A restart of
-            the skills container is required for changes to take effect.
+      <div className={`mt-4 border ${borderColor} rounded-lg overflow-hidden`}>
+        <div className={`${cardBgColor} p-4 flex justify-between items-center`}>
+          <h2
+            className={`text-xl font-semibold ${
+              isDark ? "text-orange-200" : "text-orange-800"
+            }`}
+          >
+            Default Skills
+          </h2>
+          <button
+            onClick={saveDefaultSkills}
+            disabled={savingDefaultSkills || !hasDefaultSkillsChanges}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded
+              ${
+                isDark
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }
+              text-white transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
+            `}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${savingDefaultSkills ? "animate-spin" : ""}`}
+            />
+            {savingDefaultSkills ? "Saving..." : "Save Default Skills"}
+          </button>
+        </div>
+
+        {defaultSkillsSaveError && (
+          <div className="p-4 bg-red-500 text-white">
+            {defaultSkillsSaveError}
+          </div>
+        )}
+
+        <div className={`${bgColor} p-4`}>
+          <p className="text-sm mb-4">
+            Add a new skill with its pip package name, its Git repository
+            URL, or a local path. A restart is necessary for a new skill to
+            start.
           </p>
 
-          {defaultSkillsSaveError && (
-            <div className="p-2 mb-3 bg-red-500 text-white rounded text-sm">
-              {defaultSkillsSaveError}
-            </div>
-          )}
-
           {defaultSkills.length ? (
-            <ul className="divide-y divide-gray-500/20 mb-3">
+            <ul className="divide-y divide-gray-500/20 mb-4">
               {defaultSkills.map((entry) => (
                 <li
                   key={entry}
@@ -335,12 +371,12 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-gray-400 mb-3">
+            <p className="text-sm text-gray-400 mb-4">
               No default skills configured.
             </p>
           )}
 
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2">
             <input
               type="text"
               value={newDefaultSkill}
@@ -369,29 +405,9 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
               Add
             </button>
           </div>
-
-          <button
-            onClick={saveDefaultSkills}
-            disabled={savingDefaultSkills || !hasDefaultSkillsChanges}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded
-              ${
-                isDark
-                  ? "bg-orange-600 hover:bg-orange-700"
-                  : "bg-orange-500 hover:bg-orange-600"
-              }
-              text-white transition-colors
-              disabled:opacity-50 disabled:cursor-not-allowed
-              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
-            `}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${savingDefaultSkills ? "animate-spin" : ""}`}
-            />
-            {savingDefaultSkills ? "Saving..." : "Save Default Skills"}
-          </button>
         </div>
       </div>
+    </div>
     </div>
   );
 };

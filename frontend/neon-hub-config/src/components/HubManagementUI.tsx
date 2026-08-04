@@ -562,6 +562,7 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
           ),
           "General Configuration"
         )}
+        <Skills isDark={isDark} />
         {renderConfigSection(
           "api_keys",
           config.api_keys || {},
@@ -569,7 +570,6 @@ const HubManagementUI: React.FC<HubManagementUIProps> = ({ isDark }) => {
         )}
         {renderConfigSection("hana", config.hana || {}, "HANA Configuration")}
         {renderConfigSection("iris", config.iris || {}, "IRIS Configuration")}
-        <Skills isDark={isDark} />
         <BaseUrlConfig isDark={isDark} />
       </div>
       <button

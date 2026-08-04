@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import neonLogo from "../assets/neon_logo.png";
+import neonLogo from "../assets/neon_logo.svg";
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');

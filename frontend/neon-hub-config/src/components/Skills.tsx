@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, X } from "lucide-react";
 import { api } from "../lib/utils";
 
 interface SkillsProps {
@@ -9,6 +9,7 @@ interface SkillsProps {
 interface SkillsState {
   installed: string[];
   blacklisted: string[];
+  default_skills: string[];
 }
 
 // "skill-date_time.neongeckocom" -> "Date Time"
@@ -25,15 +26,24 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
   const [blacklisted, setBlacklisted] = useState<string[]>([]);
   const [savedBlacklist, setSavedBlacklist] = useState<string[]>([]);
   const [customSkillId, setCustomSkillId] = useState("");
+  const [defaultSkills, setDefaultSkills] = useState<string[]>([]);
+  const [savedDefaultSkills, setSavedDefaultSkills] = useState<string[]>([]);
+  const [newDefaultSkill, setNewDefaultSkill] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDefaultSkills, setSavingDefaultSkills] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [defaultSkillsSaveError, setDefaultSkillsSaveError] = useState<
+    string | null
+  >(null);
 
   const applyState = (data: SkillsState) => {
     setInstalled(data.installed || []);
     setBlacklisted(data.blacklisted || []);
     setSavedBlacklist(data.blacklisted || []);
+    setDefaultSkills(data.default_skills || []);
+    setSavedDefaultSkills(data.default_skills || []);
   };
 
   const fetchSkills = async () => {
@@ -58,6 +68,9 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
     JSON.stringify([...blacklisted].sort()) !==
     JSON.stringify([...savedBlacklist].sort());
 
+  const hasDefaultSkillsChanges =
+    JSON.stringify(defaultSkills) !== JSON.stringify(savedDefaultSkills);
+
   const saveSkills = async () => {
     setSaving(true);
     setSaveError(null);
@@ -70,6 +83,21 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
       console.error("Skills save error:", err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveDefaultSkills = async () => {
+    setSavingDefaultSkills(true);
+    setDefaultSkillsSaveError(null);
+    try {
+      applyState(await api.saveDefaultSkills(defaultSkills));
+    } catch (err) {
+      setDefaultSkillsSaveError(
+        err instanceof Error ? err.message : "Failed to save default skills"
+      );
+      console.error("Default skills save error:", err);
+    } finally {
+      setSavingDefaultSkills(false);
     }
   };
 
@@ -86,6 +114,17 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
     if (!skillId || blacklisted.includes(skillId)) return;
     setBlacklisted((prev) => [...prev, skillId]);
     setCustomSkillId("");
+  };
+
+  const addDefaultSkill = () => {
+    const entry = newDefaultSkill.trim();
+    if (!entry || defaultSkills.includes(entry)) return;
+    setDefaultSkills((prev) => [...prev, entry]);
+    setNewDefaultSkill("");
+  };
+
+  const removeDefaultSkill = (entry: string) => {
+    setDefaultSkills((prev) => prev.filter((item) => item !== entry));
   };
 
   const borderColor = isDark ? "border-orange-400" : "border-orange-600";
@@ -252,6 +291,105 @@ const Skills: React.FC<SkillsProps> = ({ isDark }) => {
               Disable
             </button>
           </div>
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-gray-500/20">
+          <h3 className="text-sm font-semibold mb-1">Default Skills</h3>
+          <p className="text-sm mb-3">
+            Entries in this list are added to{" "}
+            <code>skills.default_skills</code> in neon.yaml. The skills
+            container installs each entry with pip on every boot. Entries can
+            be a pip package name, a git URL, or a local path. A restart of
+            the skills container is required for changes to take effect.
+          </p>
+
+          {defaultSkillsSaveError && (
+            <div className="p-2 mb-3 bg-red-500 text-white rounded text-sm">
+              {defaultSkillsSaveError}
+            </div>
+          )}
+
+          {defaultSkills.length ? (
+            <ul className="divide-y divide-gray-500/20 mb-3">
+              {defaultSkills.map((entry) => (
+                <li
+                  key={entry}
+                  className="py-2 flex items-center justify-between gap-4"
+                >
+                  <span className="text-sm font-mono break-all">{entry}</span>
+                  <button
+                    aria-label={`Remove ${entry}`}
+                    onClick={() => removeDefaultSkill(entry)}
+                    className={`
+                      flex-shrink-0 p-1 rounded transition-colors
+                      ${
+                        isDark
+                          ? "hover:bg-gray-700 text-gray-300"
+                          : "hover:bg-orange-100 text-gray-500"
+                      }
+                    `}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-400 mb-3">
+              No default skills configured.
+            </p>
+          )}
+
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={newDefaultSkill}
+              onChange={(e) => setNewDefaultSkill(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addDefaultSkill()}
+              placeholder="skill-name, git+https://..., or /path/to/skill"
+              className={`w-full p-2 rounded ${
+                isDark ? "bg-gray-700 text-white" : "bg-white text-gray-900"
+              } border ${borderColor}`}
+            />
+            <button
+              onClick={addDefaultSkill}
+              disabled={!newDefaultSkill.trim()}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded whitespace-nowrap
+                ${
+                  isDark
+                    ? "bg-orange-600 hover:bg-orange-700"
+                    : "bg-orange-500 hover:bg-orange-600"
+                }
+                text-white transition-colors
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+
+          <button
+            onClick={saveDefaultSkills}
+            disabled={savingDefaultSkills || !hasDefaultSkillsChanges}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded
+              ${
+                isDark
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }
+              text-white transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed
+              focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50
+            `}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${savingDefaultSkills ? "animate-spin" : ""}`}
+            />
+            {savingDefaultSkills ? "Saving..." : "Save Default Skills"}
+          </button>
         </div>
       </div>
     </div>

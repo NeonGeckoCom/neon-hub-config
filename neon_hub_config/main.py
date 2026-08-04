@@ -11,6 +11,7 @@ Environment Variables:
     NEON_PATH: Path to the Neon configuration file (default: "/xdg/config/mycroft/mycroft.conf")
 """
 import base64
+import errno
 import logging
 import secrets
 import string
@@ -42,6 +43,43 @@ HUB_ADMIN_TOKEN_FILE = expanduser(
     getenv("HUB_ADMIN_TOKEN_FILE", "/xdg/config/neon/hub_admin.yaml"))
 
 security = HTTPBasic()
+
+
+def _config_save_http_error(e: Exception, config_path: str) -> HTTPException:
+    """
+    Translate a config-save exception into a sanitized HTTP error.
+
+    The full traceback stays in the server logs. The client only gets a
+    stable error code and an actionable message, so no internal details
+    (stack frames, code paths) reach the UI.
+
+    Args:
+        e (Exception): The exception raised while saving
+        config_path (str): Path of the config file being written, used
+            when the exception does not carry a filename
+
+    Returns:
+        HTTPException: 500 error with detail {"error": code, "message": str}
+    """
+    path = getattr(e, "filename", None) or config_path
+    if isinstance(e, PermissionError):
+        code = "permission_denied"
+        message = (f"Permission denied writing {path}. Check the file's "
+                   "owner and permissions on the Hub, then try again.")
+    elif isinstance(e, (FileNotFoundError, NotADirectoryError,
+                        IsADirectoryError)):
+        code = "invalid_path"
+        message = (f"Cannot write {path}: the path is missing or is not "
+                   "a regular file.")
+    elif isinstance(e, OSError) and e.errno == errno.ENOSPC:
+        code = "disk_full"
+        message = f"Cannot write {path}: the disk is full."
+    else:
+        code = "save_failed"
+        message = ("An unexpected error occurred while saving. Check the "
+                   "hub-config service logs for details.")
+    return HTTPException(status_code=500,
+                         detail={"error": code, "message": message})
 
 
 class HanaClient:
@@ -192,7 +230,12 @@ class NeonHubConfigManager:
     def _load_diana_config(self) -> Dict:
         """Load Diana configuration from file, creating it with defaults if needed."""
         if not exists(self.diana_config_path):
-            self._save_diana_config(self.default_diana_config)
+            try:
+                self._save_diana_config(self.default_diana_config)
+            except Exception:
+                # Already logged; startup must not fail because the
+                # default config could not be written
+                pass
             return self.default_diana_config.copy()
 
         try:
@@ -227,6 +270,9 @@ class NeonHubConfigManager:
 
         Args:
             config (Dict): Configuration to save
+
+        Raises:
+            Exception: If the configuration cannot be written
         """
         try:
             with open(self.diana_config_path, "w+", encoding="utf-8") as file:
@@ -235,6 +281,7 @@ class NeonHubConfigManager:
                 self.yaml.dump(new_config, file)
         except Exception as e:
             self.logger.exception(f"Error saving config: {e}")
+            raise
 
     def _save_neon_user_config(self, config: Dict) -> None:
         """
@@ -242,6 +289,9 @@ class NeonHubConfigManager:
 
         Args:
             config (Dict): Configuration to save
+
+        Raises:
+            Exception: If the configuration cannot be written
         """
         try:
             with open(self.neon_user_config_path, "w+", encoding="utf-8") as file:
@@ -250,6 +300,7 @@ class NeonHubConfigManager:
                 self.yaml.dump(new_config, file)
         except Exception as e:
             self.logger.exception(f"Error saving Neon user config: {e}")
+            raise
 
     def get_neon_config(self) -> Dict:
         """
@@ -563,7 +614,12 @@ async def neon_update_config(
         Dict: Updated configuration
     """
     logger.info("Updating Neon config")
-    return manager.update_neon_config(config)
+    try:
+        return manager.update_neon_config(config)
+    except Exception as e:
+        logger.exception("Error saving Neon config")
+        raise _config_save_http_error(
+            e, manager.neon_user_config_path) from e
 
 @app.get("/v1/neon_user_config")
 async def neon_get_user_config(
@@ -596,7 +652,11 @@ async def neon_update_user_config(
         Dict: Updated configuration
     """
     logger.info("Updating Neon config")
-    manager.update_neon_user_config(config)
+    try:
+        manager.update_neon_user_config(config)
+    except Exception as e:
+        raise _config_save_http_error(
+            e, manager.neon_user_config_path) from e
     return manager.get_neon_user_config()
 
 
@@ -628,7 +688,11 @@ async def diana_update_config(
         Dict: Updated configuration
     """
     logger.info("Updating Diana config")
-    return manager.update_diana_config(config)
+    try:
+        return manager.update_diana_config(config)
+    except Exception as e:
+        raise _config_save_http_error(
+            e, manager.diana_config_path) from e
 
 
 class SkillsBlacklistUpdate(BaseModel):

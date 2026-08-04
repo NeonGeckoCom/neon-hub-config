@@ -13,3 +13,5 @@ jobs:
     secrets: inherit
     with:
       image_name: ${{ github.repository }}
+      setup_qemu: true
+      platforms: linux/amd64,linux/arm64

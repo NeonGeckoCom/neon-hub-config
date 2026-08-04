@@ -27,7 +27,7 @@
     "@types/node": "^22.19.17",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -35,12 +35,19 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^15.15.0",
-    "postcss": "^8.5.9",
+    "postcss": "^8.5.10",
     "tailwind-merge": "^2.6.1",
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.1",
-    "vite": "^5.4.21"
+    "vite": "^7.3.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "yaml@>=2.0.0 <2.8.3": ">=2.8.3",
+      "brace-expansion@>=5.0.0 <5.0.6": ">=5.0.6",
+      "brace-expansion@>=2.0.0 <=2.0.1": ">=2.0.2"
+    }
   }
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { dump, load } from "js-yaml";
 import { RefreshCw, Save } from "lucide-react";
+import { apiErrorMessage } from "../lib/utils";
 
 interface ConfigEditorProps {
   title: string;
@@ -92,7 +93,12 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
       });
 
       if (!saveResponse.ok) {
-        throw new Error(`Failed to save ${title} configuration`);
+        throw new Error(
+          await apiErrorMessage(
+            saveResponse,
+            `Failed to save ${title} configuration`
+          )
+        );
       }
 
       await fetchConfig

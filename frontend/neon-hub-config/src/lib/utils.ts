@@ -110,6 +110,49 @@ export const api = {
     return response.json();
   },
 
+  async fetchSkills() {
+    const response = await apiFetch(`/v1/skills`, {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch skills: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async saveSkillsBlacklist(blacklistedSkills: string[]) {
+    const response = await apiFetch(`/v1/skills`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blacklisted_skills: blacklistedSkills }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save skills configuration");
+    }
+
+    return response.json();
+  },
+
+  async saveDefaultSkills(defaultSkills: string[]) {
+    const response = await apiFetch(`/v1/skills/default`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ default_skills: defaultSkills }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save default skills configuration");
+    }
+
+    return response.json();
+  },
+
   async saveDianaConfig(config: object) {
     const response = await apiFetch(`/v1/diana_config`, {
       method: "POST",

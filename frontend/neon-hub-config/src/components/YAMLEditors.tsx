@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { dump, load } from "js-yaml";
 import { RefreshCw, Save } from "lucide-react";
+import { apiErrorMessage } from "../lib/utils";
 
 interface ConfigEditorProps {
   title: string;
@@ -25,7 +26,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -69,7 +70,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [baseUrl, endpoint, title]);
 
   const saveConfig = async () => {
     if (!isValid) {
@@ -92,7 +93,12 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
       });
 
       if (!saveResponse.ok) {
-        throw new Error(`Failed to save ${title} configuration`);
+        throw new Error(
+          await apiErrorMessage(
+            saveResponse,
+            `Failed to save ${title} configuration`
+          )
+        );
       }
 
       await fetchConfig
@@ -122,7 +128,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
   useEffect(() => {
     fetchConfig();
-  }, [endpoint]);
+  }, [fetchConfig]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (!value) return;
@@ -133,7 +139,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
       setYamlContent(value);
       setHasChanges(true);
       setSaveError(null);
-    } catch (e) {
+    } catch {
       setIsValid(false);
     }
   };

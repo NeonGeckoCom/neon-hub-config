@@ -5,6 +5,27 @@ import { API_BASE_URL } from "../components/HubManagementUI"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+// Extract a user-facing message from an API error response. The backend
+// sends {detail: {error, message}} for classified save failures and
+// {detail: string} for plain HTTP errors; anything else gets the fallback.
+export async function apiErrorMessage(
+  response: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const detail = (await response.json())?.detail;
+    if (typeof detail === "string" && detail) {
+      return detail;
+    }
+    if (typeof detail?.message === "string") {
+      return detail.message;
+    }
+  } catch {
+    // Response body was not JSON
+  }
+  return fallback;
+}
 // API utilities
 export const api = {
   // Method to update runtime configuration
@@ -63,7 +84,9 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error("Failed to save Neon configuration");
+      throw new Error(
+        await apiErrorMessage(response, "Failed to save Neon configuration")
+      );
     }
 
     return response.json();
@@ -120,7 +143,9 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error("Failed to save Diana configuration");
+      throw new Error(
+        await apiErrorMessage(response, "Failed to save Diana configuration")
+      );
     }
 
     return response.json();

@@ -9,9 +9,6 @@ import {
 import SecretField from "./SecretField";
 import { api } from "../lib/utils";
 
-// Build-time configuration with runtime fallback
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
-
 interface TooltipInterface {
   [key: string]: string;
 }

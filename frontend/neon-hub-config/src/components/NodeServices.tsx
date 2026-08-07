@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { api } from "../lib/utils";
 
 interface NodeServicesProps {
   isDark: boolean;
@@ -24,7 +25,7 @@ const NodeServices: React.FC<NodeServicesProps> = ({ isDark }) => {
 
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await fetch("/v1/pair", {
+      const response = await fetch(`${api.getBaseUrl()}/v1/pair`, {
         method: "POST",
         headers: {
           Authorization: `Basic ${token}`,

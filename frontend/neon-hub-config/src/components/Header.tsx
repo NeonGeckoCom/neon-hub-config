@@ -1,5 +1,5 @@
 import React from 'react';
-import neonLogo from "../assets/neon_logo.png";
+import neonLogo from "../assets/neon_logo.svg";
 import { Sun, Moon } from "lucide-react";
 
 interface HeaderProps {
